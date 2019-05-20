@@ -47,8 +47,8 @@ typedef struct USEROPEN {
   char dir[80]; // 打开文件所在路径，方便快速检查出指定文件是否已经打开
   int count; // 读写指针在文件中的位置
   char fcbstate; // 是否修改了文件的 FCB 的内容，如果修改了置为 1，否则为 0
-  char topenfile; // 表示该用户打开表项是否为空，若值为 0，表示为空，否则表示已被某打开文件占据
-  int father; //父目录再打开文件表项的位置
+  char topenfile; // 表示该用户打开文件表表项是否为空，若值为 0，表示为空，否则表示已被某打开文件占据
+  int father; //父目录在用户打开文件表的位置
 } useropen;
 
 //引导块
@@ -130,12 +130,16 @@ int main(){
       my_rmdir(command);
     }
     else if (!strcmp(command, "my_read")) {
-      scanf("%d", &fd);
-
+      int len;
+      scanf("%d %d", &fd, &len);
+      my_read(fd,len);
     }
     else if (!strcmp(command, "my_write")) {
       scanf("%d", &fd);
       my_write(fd);
+    }
+    else if (!strcmp(command, "my_format")) {
+      my_format();
     }
     else {
       printf("command %s : no such command\n", command);
@@ -148,7 +152,7 @@ int main(){
   return 0;
 }
 
-//进入文件系统函数
+//进入文件系统函数:在虚拟磁盘上建立文件系统
 void startsys(){
   FILE *fp;
   unsigned char buf[SIZE];
@@ -167,21 +171,29 @@ void startsys(){
     //从源src所指的内存地址的起始位置开始拷贝n个字节到目标dest所指的内存地址的起始位置中
     //判断文件系统魔数是否正确
     if (strcmp(((block0 *)buf)->magic, "10101010") != 0){
-      printf("文件系统魔数出错,重新创建文件系统\n");
-      my_format();
+      // printf("文件系统魔数出错,重新创建文件系统\n");
+      // my_format();
+      printf("文件系统魔数出错,出错返回\n");
+      return -1;
     }else{
       //将缓冲区内容复制到虚拟磁盘中
       memcpy(myvhard, buf, SIZE);
     }
-    //关闭mysys文件
-    //注意：如果fp == NULL，不需要关闭，否则会出错
-    fclose(fp);
   }else{
     //文件不存在
-    printf("mysys文件系统不存在，现在开始创建文件系统\n");
+    //调用C的create()创建mysys文件
+    creat("mysys",0777);
     //调用my_format()格式化虚拟磁盘
+    printf("mysys文件系统不存在，现在开始创建文件系统\n");
     my_format();
+    //将虚拟硬盘的内容写入mysys文件
+    fp = fopen("mysys","wb");
+    fwrite(myvhard,SIZE,1,fp);
   }
+
+  //关闭mysys文件
+  //注意：如果fp == NULL，不需要关闭，否则会出错
+  fclose(fp);
 
   //初始化用户打开文件表,将表项 0 分配给根目录文件使用，并填写根目录文件的相关信息
   root = (fcb *)(myvhard + 5*BLOCKSIZE);
@@ -212,10 +224,11 @@ void startsys(){
 
 //退出文件系统函数
 void my_exitsys(){
-
-  while(curdirID){
-    curdirID = my_close(curdirID);
-  }
+    // printf("%d",curdirID);
+  //先关闭打开的文件
+  // while(curdirID){
+  //   curdirID = my_close(curdirID);
+  // }
   //调用C的fopen()打开mysys文件
   FILE *fp = fopen("mysys", "wb");
   //调用C的fwrite()将虚拟磁盘内容写入mysys文件
@@ -242,7 +255,7 @@ void my_format(){
   //初始化虚拟硬盘保留区(引导块)内容
   strcpy(blk0->magic, "10101010");//设置文件系统魔数
   strcpy(blk0->information, "My Simple FileSystem\nBLOCKSIZE=1KB\nSIZE=1000KB\nBLOCKNUM=1000\nROOTBLOCKNUM=2\n");
-  blk0->root = 5;
+  blk0->root = 5;//根目录文件的起始盘块号
   blk0->startblock = (unsigned char *)root;
   //在保留区后面建立两张FAT表，每个FAT占两个块
   for(int i = 0; i < 5; i ++){
@@ -292,9 +305,9 @@ void my_format(){
   root->length = 2*sizeof(fcb);
   root->free = 1;
 
-  fp = fopen("mysys","wb");
-  fwrite(myvhard,SIZE,1,fp);
-  fclose(fp);
+  // fp = fopen("mysys","wb");
+  // fwrite(myvhard,SIZE,1,fp);
+  // fclose(fp);
   
   printf("my_format completed\n");
 }
@@ -798,7 +811,7 @@ int my_close(int fd){
   strcpy(openfilelist[fd].exname, "");
   openfilelist[fd].topenfile = 0;
 
-  return father;
+  return 0;
 }
 
 /*
