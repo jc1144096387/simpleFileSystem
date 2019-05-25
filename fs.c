@@ -224,11 +224,12 @@ void startsys(){
 
 //退出文件系统函数
 void my_exitsys(){
-    // printf("%d",curdirID);
-  //先关闭打开的文件
-  // while(curdirID){
-  //   curdirID = my_close(curdirID);
-  // }
+  //关闭打开的文件,撤销用户打开文件表，释放其内存空间
+  for(int i = 0; i < 10; i ++){
+    if(openfilelist[i].topenfile){
+      my_close(i);
+    }
+  }
   //调用C的fopen()打开mysys文件
   FILE *fp = fopen("mysys", "wb");
   //调用C的fwrite()将虚拟磁盘内容写入mysys文件
@@ -318,6 +319,7 @@ void my_format(){
 
 //更改当前目录函数
 void my_cd(char* dirname){
+  //test: my_cd jc/jc
   char *dir;
   int fd;
   dir = strtok(dirname, "/");
@@ -326,6 +328,7 @@ void my_cd(char* dirname){
   }else if(strcmp(dir, "..") == 0){
     if(curdirID){
       curdirID = my_close(curdirID);
+      printf("当前目录文件的fd为%d\n",curdirID);
     }
     return;
   }else if(strcmp(dir, "~") == 0){
@@ -334,6 +337,7 @@ void my_cd(char* dirname){
     }
     dir = strtok(NULL, "/");
   }
+
   while(dir){
     fd = my_open(dir);
     if(fd != -1){
@@ -342,35 +346,7 @@ void my_cd(char* dirname){
       return;
     }
     dir = strtok(NULL, "/");
-  }
-
-
-
-  //调用my_open()打开指定目录文件dirname的父目录文件
-
-  //调用my_read()读入父目录文件到内存缓冲区
-
-  //在父目录文件中检索dirname文件
-
-  //dirname文件是否存在？若不存在则出错返回，否则继续执行
-
-    //调用my_close()关闭父目录文件
-
-    //调用my_close()关闭原当前目录文件
-
-    //dirname文件是否已经打开？
-
-    //若没有打开，则调用my_open()打开dirname文件,否则跳过这一段
-
-    //调用my_read()读入dirname文件内容
-
-    //设置当前目录为dirname
-      //useropen *ptrcurdir:当前目录内容所在缓冲区地址
-
-      //char currentdir[80]:记录当前目录的目录名（包括目录的路径）
-      
-      //unsigned int curdirID:当前目录在打开文件表项的序号
-      
+  }   
 }
 
 //创建子目录函数
@@ -390,10 +366,9 @@ void my_mkdir(char* dirname){
   fcbptr = (fcb *)text;
 
   //在当前目录下创建?如果dirname[0] == '/'表示不是在当前目录下创建
+  // 如 /xx/xx/xx
   if(dirname[0] == '/'){
-    //打开并读入父目录文件内容
-
-    //使用dirname检索父目录文件
+    //分割最后一个目录名，用前面的路径检索用户文件打开表，如果已经打开则
 
   }else{
     //使用dirname检索当前目录文件
@@ -689,9 +664,27 @@ void my_rm(char* filename){
 }
 
 //打开文件函数
-//如果是打开当前目录下的文件，filename形如"dir2/dir3/file"
-//如果是不是当前目录，filename形如"/dir1/dir2/dir3/file"
+//如果是打开当前目录下的文件，filename形如"dir2/dir3/file"相对路径
+//如果不是当前目录，filename形如"/dir1/dir2/dir3/file"绝对路径
 int my_open(char* filename){
+  // printf("test: 格式化前的filename为%s\n",filename);
+  // //先对filename进行格式化
+  // char newdir[80];
+  // //如果传入的是绝对路径
+  // if(filename[0] == '/'){
+  //   strcpy(newdir, "~");
+  // }else{
+  //   strcpy(newdir, openfilelist[curdirID].dir);
+  //   strcat(newdir, "/");
+  // }
+  // strcat(newdir, filename);
+  // strcpy(filename, newdir);
+  // printf("test: 格式化后的filename为%s\n",filename);
+  // //使用格式化后的filename检索用户打开文件表
+
+  // char dirs[80][80];
+  // int count = spiltDir(dirs, filename);
+
 
   fcb *fcbptr;
   char *fname, exname[3], *str, text[MAXTEXT];
@@ -747,10 +740,12 @@ int my_open(char* filename){
   strcat(openfilelist[fd].dir, "/");
   strcat(openfilelist[fd].dir, filename);
   openfilelist[fd].father = curdirID;
+  printf("打开文件的父目录的fd为%d\n",curdirID);
   openfilelist[fd].count = 0;
   openfilelist[fd].fcbstate = 0;
   openfilelist[fd].topenfile = 1;
 
+  printf("打开文件的fd为%d\n",fd);
   return fd;
 
   //使用filename检索用户打开文件表
@@ -787,6 +782,7 @@ int my_open(char* filename){
 int my_close(int fd){
   fcb *fcbptr;
   int father;
+  father = openfilelist[fd].father;
   if(fd < 0 || fd >= MAXOPENFILE){
     printf("my_close: fd无效\n");
     return -1;
@@ -801,7 +797,6 @@ int my_close(int fd){
     fcbptr->first = openfilelist[fd].first;
     fcbptr->length = openfilelist[fd].length;
     fcbptr->free = openfilelist[fd].free;
-    father = openfilelist[fd].father;
     openfilelist[father].count = openfilelist[fd].diroff * sizeof(fcb);
     do_write(father, (char *)fcbptr, sizeof(fcb), 2);
     free(fcbptr);
@@ -811,7 +806,9 @@ int my_close(int fd){
   strcpy(openfilelist[fd].exname, "");
   openfilelist[fd].topenfile = 0;
 
-  return 0;
+  printf("关闭文件的fd为%d\n",fd);
+  printf("关闭文件的父目录的fd为%d\n",father);
+  return father;
 }
 
 /*
@@ -1087,4 +1084,33 @@ unsigned short findblock(){
   }
   printf("findblock: 找不到空闲磁盘块\n");
   return -1; 
+}
+
+//按'/'分割路径得到目录名数组
+int spiltDir(char dirs[80][80], char *filename) {
+  //得到起始和末尾下标（去掉首尾的'/'）
+  int bg = 0; int ed = strlen(filename);
+  if (filename[0] == '/') ++bg;
+  if (filename[ed - 1] == '/') --ed;
+
+  //假设filename 为 abc/def/gh
+  //dirs[0][0] = a,dirs[0][1] = b,dirs[0][2] = c,dirs[0][3] = '\0'
+  //dirs[1][0] = d,dirs[1][1] = e,dirs[1][2] = f,dirs[1][3] = '\0'
+  //dirs[2][0] = g,dirs[2][1] = h,dirs[2][2] = '\0'
+  //即将filename分解为多个目录名
+  int ret = 0, tlen = 0;
+  for (int i = bg; i < ed; ++i) {
+    if (filename[i] == '/') {
+      dirs[ret][tlen] = '\0';
+      tlen = 0;
+      ++ret;
+    }
+    else {
+      dirs[ret][tlen++] = filename[i];
+    }
+  }
+  dirs[ret][tlen] = '\0';
+
+  //返回目录数
+  return ret+1;
 }
