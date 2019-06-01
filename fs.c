@@ -111,7 +111,7 @@ int main(){
     }
     else if (!strcmp(command, "my_open")) {
       scanf("%s", command);
-      
+      my_open(command);
     }
     else if (!strcmp(command, "my_cd")) {
       scanf("%s", command);
@@ -119,7 +119,7 @@ int main(){
     }
     else if (!strcmp(command, "my_create")) {
       scanf("%s", command);
-      
+      my_create(command);
     }
     else if (!strcmp(command, "my_rm")) {
       scanf("%s", command);
@@ -565,8 +565,11 @@ int my_create(char* filename){
     printf("my_create: 文件名不符合格式\n");
     return -1;
   }
+  //修改当前目录的读写指针
   openfilelist[curdirID].count = 0;
+  //读入当前目录文件内容
   rbn = do_read(curdirID, openfilelist[curdirID].length, text);
+  //检查要创建的文件是否重名
   fcbptr = (fcb *)text;
   for(i = 0; i < rbn/sizeof(fcb); i ++){
     if(strcmp(fcbptr->filename, fname) == 0 && strcmp(fcbptr->exname, exname) == 0){
@@ -575,6 +578,7 @@ int my_create(char* filename){
     }
     fcbptr ++;
   }
+  //找到父目录未分配的目录项
   fcbptr = (fcb *)text;
   for(i = 0; i < rbn/sizeof(fcb); i ++){
     if(fcbptr->free == 0){
@@ -582,13 +586,17 @@ int my_create(char* filename){
     }
     fcbptr ++;
   }
+  //分配空闲磁盘块
   blkno = findblock();
   if(blkno == -1){
+    printf("mycreate: 空闲磁盘块分配失败\n");
     return -1;
   }
   (fat1 + blkno)->id = END;
   (fat2 + blkno)->id = END;
 
+
+  //创建FCB(在分配到的目录项中填写新创建文件的信息)
   now = time(NULL);
   nowtime = localtime(&now);
   strcpy(fcbptr->filename, fname);
@@ -599,25 +607,16 @@ int my_create(char* filename){
   fcbptr->first = blkno;
   fcbptr->length = 0;
   fcbptr->free = 1;
+  //将FCB写入父目录中
   openfilelist[curdirID].count = i * sizeof(fcb);
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
+  //更新父目录长度
   fcbptr = (fcb *)text;
   fcbptr->length = openfilelist[curdirID].length;
   openfilelist[curdirID].count = 0;
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
   openfilelist[curdirID].fcbstate = 1;
 
-
-  //在当前目录下创建?如果filename[0] == '/'表示不是在当前目录下创建
-  if(filename[0] == '/'){
-    //打开并读入父目录文件内容
-
-    //使用filename检索父目录文件
-
-  }else{
-    //使用filename检索当前目录文件
-
-  }
 }
 
 //删除文件函数
@@ -635,9 +634,11 @@ void my_rm(char* filename){
     printf("my_rm: 文件名不符合格式\n");
     return -1;
   }
+  //读入当前目录文件内容
   openfilelist[curdirID].count = 0;
   rbn = do_read(curdirID, openfilelist[curdirID].length, text);
   fcbptr = (fcb *)text;
+  //找到要删除的文件
   for(i = 0; i < rbn/sizeof(fcb); i ++){
     if(strcmp(fcbptr->filename,fname) == 0 && strcmp(fcbptr->exname, exname) == 0){
       break;
@@ -648,6 +649,9 @@ void my_rm(char* filename){
     printf("my_rm: 文件不存在\n");
     return;
   }
+  //todo:如果要删除的文件已被打开，则调用my_close()关闭它
+
+  //回收磁盘块
   blkno = fcbptr->first;
   while(blkno != END){
     fatptr1 = fat1 + blkno;
@@ -656,9 +660,15 @@ void my_rm(char* filename){
     fatptr1->id = FREE;
     fatptr2->id = FREE;
   }
+  //从当前目录中删除该文件的目录项
   strcpy(fcbptr->filename, "");
   fcbptr->free = 0;
   openfilelist[curdirID].count = i * sizeof(fcb);
+  do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
+  //更新父目录长度
+  fcbptr = (fcb *)text;
+  fcbptr->length = openfilelist[curdirID].length;
+  openfilelist[curdirID].count = 0;
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
   openfilelist[curdirID].fcbstate = 1;
 }
@@ -872,6 +882,9 @@ int my_write(int fd){
   k = 0;
   printf("请输入要写入的数据(输入Ctrl+Z结束):\n");
   while (gets(text)){
+    if(strcmp(text,"q") == 0){
+      break;
+    }
     len = strlen(text);
     text[len++] = '\n';
     text[len] = '\0';
@@ -985,7 +998,7 @@ int my_read (int fd, int len){
   //do_read()返回值>0?
   if(k > 0){
     //是，将text[]中内容显示到终端
-    printf("%s", text);
+    printf("%s\n", text);
   }else{
     //否，出错返回
     printf("my_read: 读文件失败\n");
