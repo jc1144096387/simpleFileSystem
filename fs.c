@@ -220,6 +220,7 @@ void startsys(){
   strcpy(currentdir,"~");
   
   startp = ((block0 *)myvhard)->startblock;
+  ptrcurdir=&openfilelist[0];
 }
 
 //退出文件系统函数
@@ -328,6 +329,7 @@ void my_cd(char* dirname){
   }else if(strcmp(dir, "..") == 0){
     if(curdirID){
       curdirID = my_close(curdirID);
+      ptrcurdir=&openfilelist[curdirID];
       printf("当前目录文件的fd为%d\n",curdirID);
     }
     return;
@@ -335,6 +337,7 @@ void my_cd(char* dirname){
     while(curdirID){
       curdirID = my_close(curdirID);
     }
+    ptrcurdir=&openfilelist[0];
     dir = strtok(NULL, "/");
   }
 
@@ -342,6 +345,7 @@ void my_cd(char* dirname){
     // printf("%s\n",dir);
     fd = my_open(dir);
     if(fd != -1){
+      ptrcurdir=&openfilelist[fd];
       curdirID = fd;
     }else{
       return;
@@ -615,13 +619,12 @@ int my_create(char* filename){
   //将FCB写入父目录中
   openfilelist[curdirID].count = i * sizeof(fcb);
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
-  //更新父目录长度
+  //修改父目录长度
   fcbptr = (fcb *)text;
   fcbptr->length = openfilelist[curdirID].length;
   openfilelist[curdirID].count = 0;
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
   openfilelist[curdirID].fcbstate = 1;
-
 }
 
 //删除文件函数
@@ -673,18 +676,18 @@ void my_rm(char* filename){
     fatptr1->id = FREE;
     fatptr2->id = FREE;
   }
-  //todo: 删除不了文件的bug
+
   //从当前目录中删除该文件的目录项
   strcpy(fcbptr->filename, "");
   fcbptr->free = 0;
   openfilelist[curdirID].count = i * sizeof(fcb);
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
-  // //更新父目录长度
-  // fcbptr = (fcb *)text;
-  // fcbptr->length = openfilelist[curdirID].length;
-  // openfilelist[curdirID].count = 0;
-  // do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
-  // openfilelist[curdirID].fcbstate = 1;
+  //修改父目录长度
+  fcbptr = (fcb *)text;
+  fcbptr->length = openfilelist[curdirID].length;
+  openfilelist[curdirID].count = 0;
+  do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
+  openfilelist[curdirID].fcbstate = 1;
 }
 
 //打开文件函数
@@ -725,11 +728,14 @@ int my_open(char* filename){
 
   //检索用户打开文件表
   for(i = 0; i < MAXOPENFILE; i ++){
+    //文件已打开，返回fd
     if(strcmp(openfilelist[i].filename, fname)==0 & strcmp(openfilelist[i].exname,exname)==0 && i != curdirID){
       printf("my_open: 文件已打开\n");
-      return -1;
+      return i;
     }
   }
+
+  //检索当前目录文件
   openfilelist[curdirID].count = 0;
   rbn = do_read(curdirID, openfilelist[curdirID].length, text);
   fcbptr = (fcb *)text;
@@ -771,35 +777,6 @@ int my_open(char* filename){
 
   printf("打开文件的fd为%d\n",fd);
   return fd;
-
-  //使用filename检索用户打开文件表
-  // if()
-  //文件已打开？
-  
-    //是，返回文件描述符fd
-
-    //否，在当前目录下吗？
-
-      //是，使用filename检索当前目录文件
-
-      //否，打开并读入父目录文件内容
-
-      //使用filename检索父目录文件
-    
-    //文件存在吗？
-    
-      //否，关闭父目录文件，出错返回
-
-      //是，为文件分配用户打开文件表项
-
-      //成功分配吗？
-
-        //否，关闭父目录文件，出错返回
-
-        //是，为文件建立用户打开文件表表项
-
-        //返回filename文件的描述符fd
-
 }
 
 //关闭文件函数
@@ -807,10 +784,12 @@ int my_close(int fd){
   fcb *fcbptr;
   int father;
   father = openfilelist[fd].father;
+  //检查fd有效性
   if(fd < 0 || fd >= MAXOPENFILE){
     printf("my_close: fd无效\n");
     return -1;
   }
+  //fcbstate==1即文件的fcb内容有修改，需要调用do_write写回父目录文件
   if(openfilelist[fd].fcbstate){
     fcbptr = (fcb *)malloc(sizeof(fcb));
     strcpy(fcbptr->filename, openfilelist[fd].filename);
@@ -826,6 +805,7 @@ int my_close(int fd){
     free(fcbptr);
     openfilelist[fd].fcbstate = 0;
   }
+  //回收该文件占据的用户打开文件表表项
   strcpy(openfilelist[fd].filename, "");
   strcpy(openfilelist[fd].exname, "");
   openfilelist[fd].topenfile = 0;
