@@ -181,7 +181,7 @@ void startsys(){
     }
   }else{
     //文件不存在
-    //调用C的create()创建mysys文件
+    //调用C的creat()创建mysys文件
     creat("mysys",0777);
     //调用my_format()格式化虚拟磁盘
     printf("mysys文件系统不存在，现在开始创建文件系统\n");
@@ -339,6 +339,7 @@ void my_cd(char* dirname){
   }
 
   while(dir){
+    // printf("%s\n",dir);
     fd = my_open(dir);
     if(fd != -1){
       curdirID = fd;
@@ -649,8 +650,12 @@ void my_rm(char* filename){
     printf("my_rm: 文件不存在\n");
     return;
   }
-  //todo:如果要删除的文件已被打开，则调用my_close()关闭它
-
+  //如果要删除的文件已被打开，则调用my_close()关闭它
+  for(i = 0; i < MAXOPENFILE; i ++){
+    if(strcmp(openfilelist[i].filename, fname)==0 & strcmp(openfilelist[i].exname,exname)==0 && i != curdirID){
+      my_close(i);
+    }
+  }
   //回收磁盘块
   blkno = fcbptr->first;
   while(blkno != END){
@@ -660,6 +665,7 @@ void my_rm(char* filename){
     fatptr1->id = FREE;
     fatptr2->id = FREE;
   }
+  //todo: 删除不了文件的bug
   //从当前目录中删除该文件的目录项
   strcpy(fcbptr->filename, "");
   fcbptr->free = 0;
