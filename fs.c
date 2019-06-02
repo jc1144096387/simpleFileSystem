@@ -566,6 +566,10 @@ int my_create(char* filename){
     printf("my_create: 文件名不符合格式\n");
     return -1;
   }
+  if(!exname){
+    printf("my_create: 必须输入要创建文件的拓展名\n");
+    return;
+  }
   //修改当前目录的读写指针
   openfilelist[curdirID].count = 0;
   //读入当前目录文件内容
@@ -635,6 +639,10 @@ void my_rm(char* filename){
     printf("my_rm: 文件名不符合格式\n");
     return -1;
   }
+  if(!exname){
+    printf("my_rm: 必须输入要删除文件的拓展名\n");
+    return;
+  }
   //读入当前目录文件内容
   openfilelist[curdirID].count = 0;
   rbn = do_read(curdirID, openfilelist[curdirID].length, text);
@@ -651,9 +659,9 @@ void my_rm(char* filename){
     return;
   }
   //如果要删除的文件已被打开，则调用my_close()关闭它
-  for(i = 0; i < MAXOPENFILE; i ++){
-    if(strcmp(openfilelist[i].filename, fname)==0 & strcmp(openfilelist[i].exname,exname)==0 && i != curdirID){
-      my_close(i);
+  for(int j = 0; j < MAXOPENFILE; j ++){
+    if(strcmp(openfilelist[j].filename, fname)==0 & strcmp(openfilelist[j].exname,exname)==0 && j != curdirID){
+      my_close(j);
     }
   }
   //回收磁盘块
@@ -671,12 +679,12 @@ void my_rm(char* filename){
   fcbptr->free = 0;
   openfilelist[curdirID].count = i * sizeof(fcb);
   do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
-  //更新父目录长度
-  fcbptr = (fcb *)text;
-  fcbptr->length = openfilelist[curdirID].length;
-  openfilelist[curdirID].count = 0;
-  do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
-  openfilelist[curdirID].fcbstate = 1;
+  // //更新父目录长度
+  // fcbptr = (fcb *)text;
+  // fcbptr->length = openfilelist[curdirID].length;
+  // openfilelist[curdirID].count = 0;
+  // do_write(curdirID, (char *)fcbptr, sizeof(fcb), 2);
+  // openfilelist[curdirID].fcbstate = 1;
 }
 
 //打开文件函数
